@@ -102,7 +102,6 @@ public class RunCTS extends Task {
     private String        adminport = "4849";
     private String        instancename = "server-1";
     private String        hostname = "localhost";
-    private boolean       is9;
     private String        runclientargs = "";
     private long          jointimeout = 1000l * 180l; // 180 seconds = 3 minutes
     private String        antopts;
@@ -276,47 +275,23 @@ public class RunCTS extends Task {
 	    log("systemroot                : \"" + systemroot.getPath() + "\"", project.MSG_VERBOSE);
 	}
         checkPreConditions();
-	adjustFor90();
+        verifyPasswordFile();
         initLogFile();
         writeJDKVersion();
         runTests();
         finiLogFile();
     }
     
-    private void adjustFor90() throws BuildException {
-	/*
-	 * See if we are running SJSAS 9.x or greater, if so set is9 to denote we are using 9.x.
-	 * Create the default password file location if the user has not specified one.
-	 * Check that the file exists.  If they specify a password file and we are not
-	 * running against 9.x we will ignore it.  This will keep the runcts task running
-	 * as it always has against versions previous to 9.x, using password instead of
-	 * passwordfile.  The task will now use passwordfile when run against 9.x. This
-	 * code will need to be updated to include future version when necessary.
-	 */
-	try {
-	    StringBuffer buf = runAsadmin("version");
-	    //System.err.println("&&&&&&");
-	    //System.err.println(buf);
-	    //System.err.println("&&&&&&");
-            if ( ((buf.indexOf("8.") != -1) && (buf.indexOf("GlassFish") == -1) ) ||
-		 (buf.indexOf("Reference Implementation 1.4") != -1)
-	       ) {
-                is9 = false;
-            } else {
-                is9 = true;
-            }
-	} catch (Exception e) {
-	    throw new BuildException(e);
-	}
-	if (is9 && passwordfile == null) {
-	    passwordfile = new File(tshomebin, PASSWORD_FILE_NAME);
-	}
-        if (is9 && !passwordfile.isFile()) {
-	    throw new BuildException("The passwordfile, \"" +
-				     passwordfile + "\", does not exist, specify a valid password " +
-				     "file using the passwordfile attribute");
-	}
-	log("Running against GlassFish is " + is9, project.MSG_INFO);
+    private void verifyPasswordFile() throws BuildException {
+        if (passwordfile == null) {
+            passwordfile = new File(tshomebin, PASSWORD_FILE_NAME);
+        }
+        if (!passwordfile.isFile()) {
+            throw new BuildException("The passwordfile, \"" +
+                    passwordfile + "\", does not exist, specify a valid password " +
+                    "file using the passwordfile attribute");
+        }
+        log("Running against GlassFish", project.MSG_INFO);
     }
     
     private void finiLogFile() {
@@ -673,19 +648,9 @@ public class RunCTS extends Task {
         restartServer("");
     }
 
-    private String getPasswordArgs() {
-	String result = null;
-	if (is9) {
-	    result = " --passwordfile " + passwordfile.getPath();
-	} else{
-	    result = " --password " + password;
-	}
-	return result;
-    }
-
     private void restartServer(String testArea) throws Exception {
 	if (remoteinstance) {
-	    String args = "--user " + username + getPasswordArgs() +
+	    String args = "--user " + username + " --passwordfile " + passwordfile.getPath() +
 		" --host " + hostname + " --port " + adminport + " " + instancename;
 	    runAsadmin("stop-instance " + args);
 	    if (testArea.startsWith("jacc")) {
@@ -697,7 +662,7 @@ public class RunCTS extends Task {
 	    if (testArea.startsWith("jacc")) {
 		removeJaccLog();
 	    }
-	    runAsadmin("start-domain --user " + username + getPasswordArgs());
+	    runAsadmin("start-domain --user " + username + " --passwordfile " + passwordfile.getPath());
 	}
     }
     
